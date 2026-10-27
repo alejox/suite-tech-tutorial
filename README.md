@@ -144,7 +144,7 @@ En macOS y Windows los presets descargan automáticamente las fuentes de OBS y s
 
 Los paquetes se compilan contra **OBS 31.1.1** a propósito: OBS rechaza los plugins compilados con una libobs más nueva que la suya, así que compilar contra la versión más antigua soportada hace que el plugin cargue en **OBS 31, 32 y 33**.
 
-El workflow **OBS 33 Compatibility** (`.github/workflows/obs33-compat.yaml`) compila y enlaza además el plugin contra **OBS 33.0.0** en macOS (Xcode 26.5), Windows y Ubuntu (última versión del PPA oficial) en cada push, para detectar a tiempo cualquier cambio de la API. Se puede lanzar a mano contra otra versión de OBS desde la pestaña *Actions* (*Run workflow* → `obsVersion`).
+El workflow **OBS 33 Compatibility** (`.github/workflows/obs33-compat.yaml`) compila y enlaza además el plugin contra **OBS 33.0.0** en macOS (Xcode 26.5) y Windows (Visual Studio 2026), y en Ubuntu contra la versión más reciente que ofrezca el PPA oficial (puede ir por detrás de la última versión de OBS; el job indica cuál usó) en cada push, para detectar a tiempo cualquier cambio de la API. Se puede lanzar a mano contra otra versión de OBS desde la pestaña *Actions* (*Run workflow* → `obsVersion`).
 
 ### Tests
 

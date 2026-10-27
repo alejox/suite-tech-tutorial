@@ -98,7 +98,8 @@ jobs:
 
   windows:
     name: Windows 🪟 (OBS ${{ inputs.obsVersion || '33.0.0' }})
-    runs-on: windows-2025
+    # Same image OBS 33 itself is built on (Visual Studio 2026 only).
+    runs-on: windows-2025-vs2026
     needs: buildspec
     defaults:
       run:
@@ -111,7 +112,13 @@ jobs:
           name: buildspec-compat
 
       - name: Set Up Environment 🔧
-        run: Move-Item -Force buildspec-compat.json buildspec.json
+        run: |
+          Move-Item -Force buildspec-compat.json buildspec.json
+          # The template presets target Visual Studio 2022, which this image does not have.
+          (Get-Content CMakePresets.json -Raw) -replace 'Visual Studio 17 2022', 'Visual Studio 18 2026' |
+            Set-Content CMakePresets.json -NoNewline
+          Select-String -Path CMakePresets.json -Pattern '"generator"'
+          cmake --version
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
@@ -120,6 +127,8 @@ jobs:
           config: RelWithDebInfo
 
   ubuntu:
+    # The PPA may lag behind the latest OBS release for an Ubuntu version;
+    # the job reports the version it actually built against.
     name: Ubuntu 🐧 (latest OBS from the official PPA)
     runs-on: ubuntu-24.04
     defaults:
