@@ -33,9 +33,10 @@ elseif(OS_MACOS)
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/input/platform-mac.cpp)
   target_link_libraries(
     ${CMAKE_PROJECT_NAME}
-    PRIVATE "$<LINK_LIBRARY:FRAMEWORK,ApplicationServices.framework>"
-            "$<LINK_LIBRARY:FRAMEWORK,Carbon.framework>"
-            "$<LINK_LIBRARY:FRAMEWORK,CoreFoundation.framework>"
+    PRIVATE
+      "$<LINK_LIBRARY:FRAMEWORK,ApplicationServices.framework>"
+      "$<LINK_LIBRARY:FRAMEWORK,Carbon.framework>"
+      "$<LINK_LIBRARY:FRAMEWORK,CoreFoundation.framework>"
   )
 elseif(OS_LINUX)
   find_package(X11 REQUIRED)
