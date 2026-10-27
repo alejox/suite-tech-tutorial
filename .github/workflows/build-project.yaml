@@ -1,6 +1,11 @@
 name: Build Project
 on:
   workflow_call:
+    inputs:
+      release:
+        description: Build release packages (Release config, packaging enabled)
+        type: boolean
+        default: false
     outputs:
       pluginName:
         description: Project name detected by parsing build spec file
@@ -55,6 +60,10 @@ jobs:
               ;;
             *) ;;
           esac
+
+          if [[ "${{ inputs.release }}" == 'true' ]]; then
+            config_data=('codesign:true' 'notarize:true' 'package:true' 'config:Release')
+          fi
 
           for config in "${config_data[@]}"; do
             IFS=':' read -r key value <<< "${config}"

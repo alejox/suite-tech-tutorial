@@ -1,0 +1,129 @@
+name: Release
+run-name: Release ${{ inputs.version }} 🛫
+# Builds release packages for Windows, macOS and Ubuntu, then creates the
+# version tag and publishes the GitHub release with the installers attached.
+# Run it from the Actions tab (Run workflow) with the version from
+# buildspec.json.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (X.Y.Z or X.Y.Z-beta1 / -rc1); must match buildspec.json
+        required: true
+      draft:
+        description: Create the release as a draft
+        type: boolean
+        default: false
+permissions:
+  contents: write
+jobs:
+  check:
+    name: Check Version ☑️
+    runs-on: ubuntu-24.04
+    outputs:
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Version ☑️
+        id: check
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s extglob
+
+          case "${VERSION}" in
+            +([0-9]).+([0-9]).+([0-9]) ) echo 'prerelease=false' >> "$GITHUB_OUTPUT" ;;
+            +([0-9]).+([0-9]).+([0-9])-@(beta|rc)*([0-9]) ) echo 'prerelease=true' >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::'${VERSION}' is not a valid version (X.Y.Z or X.Y.Z-beta1)"; exit 1 ;;
+          esac
+
+          spec_version="$(jq -r .version buildspec.json)"
+          if [[ "${VERSION%%-*}" != "${spec_version}" ]]; then
+            echo "::error::Version ${VERSION} does not match buildspec.json (${spec_version})"
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" > /dev/null; then
+            echo "::error::Tag ${VERSION} already exists"
+            exit 1
+          fi
+
+  build-project:
+    name: Build Project 🧱
+    needs: check
+    uses: ./.github/workflows/build-project.yaml
+    with:
+      release: true
+    secrets: inherit
+    permissions:
+      contents: read
+
+  create-release:
+    name: Create Release 🛫
+    needs: [check, build-project]
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Build Artifacts 📥
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect Files 🏷️
+        run: |
+          set -euo pipefail
+          shopt -s extglob nullglob
+
+          mkdir -p release
+          commit_hash="${GITHUB_SHA:0:9}"
+          variants=(
+            'windows-x64;zip|exe'
+            'macos-universal;tar.xz|pkg'
+            'ubuntu-24.04-x86_64;tar.xz|deb|ddeb'
+            'sources;tar.xz'
+          )
+
+          for variant_data in "${variants[@]}"; do
+            IFS=';' read -r variant suffix <<< "${variant_data}"
+            for candidate in artifacts/*-${variant}-${commit_hash}/@(*|*-dbgsym).@(${suffix}); do
+              mv "${candidate}" release/
+            done
+          done
+
+          ls -la release
+          if [[ -z "$(ls release)" ]]; then
+            echo "::error::No packages were produced"
+            exit 1
+          fi
+
+      - name: Release Notes 📝
+        run: |
+          set -euo pipefail
+          {
+            cat .github/release-notes.md
+            echo
+            echo "### Checksums (SHA-256)"
+            echo
+            for file in release/*; do
+              echo "    ${file##*/}: $(sha256sum "${file}" | cut -d ' ' -f 1)"
+            done
+          } > release-body.md
+          cat release-body.md
+
+      - name: Create Release 🛫
+        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564
+        with:
+          tag_name: ${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.build-project.outputs.pluginName }} ${{ inputs.version }}
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ fromJSON(needs.check.outputs.prerelease) }}
+          body_path: release-body.md
+          files: release/*
