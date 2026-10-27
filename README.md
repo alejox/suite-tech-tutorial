@@ -140,6 +140,12 @@ cmake --preset ubuntu-x86_64 && cmake --build --preset ubuntu-x86_64
 
 En macOS y Windows los presets descargan automáticamente las fuentes de OBS y sus dependencias (ver `buildspec.json`). Las GitHub Actions generan los paquetes de las tres plataformas en cada push a `main` y en cada PR; al crear un tag se publica una *release*.
 
+### Compatibilidad de versiones de OBS
+
+Los paquetes se compilan contra **OBS 31.1.1** a propósito: OBS rechaza los plugins compilados con una libobs más nueva que la suya, así que compilar contra la versión más antigua soportada hace que el plugin cargue en **OBS 31, 32 y 33**.
+
+El workflow **OBS 33 Compatibility** (`.github/workflows/obs33-compat.yaml`) compila y enlaza además el plugin contra **OBS 33.0.0** en macOS (Xcode 26.5), Windows y Ubuntu (última versión del PPA oficial) en cada push, para detectar a tiempo cualquier cambio de la API. Se puede lanzar a mano contra otra versión de OBS desde la pestaña *Actions* (*Run workflow* → `obsVersion`).
+
 ### Tests
 
 ```bash

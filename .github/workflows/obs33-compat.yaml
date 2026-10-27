@@ -1,0 +1,146 @@
+name: OBS 33 Compatibility
+run-name: ${{ github.ref_name }} OBS ${{ inputs.obsVersion || '33.0.0' }} compatibility build 🧪
+# Compiles and links the plugin against a newer OBS than the one used for
+# releases. Releases stay on the version in buildspec.json because OBS
+# refuses to load plugins built against a newer libobs than itself: building
+# against the oldest supported OBS keeps the plugin loadable on every newer
+# one. This job makes sure the code also keeps building on the latest API.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      obsVersion:
+        description: OBS Studio tag to build against
+        required: false
+        default: 33.0.0
+permissions:
+  contents: read
+env:
+  OBS_VERSION: ${{ inputs.obsVersion || '33.0.0' }}
+jobs:
+  buildspec:
+    name: Prepare buildspec for OBS ${{ inputs.obsVersion || '33.0.0' }} 📝
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate buildspec 📝
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Same pre-built dependencies OBS itself uses for this release.
+          curl -fsSL -o obs-presets.json \
+            "https://raw.githubusercontent.com/obsproject/obs-studio/${OBS_VERSION}/CMakePresets.json"
+          jq '.configurePresets[] | select(.name == "dependencies") | .vendor["obsproject.com/obs-studio"].dependencies' \
+            obs-presets.json > obs-deps.json
+
+          # The template downloads the OBS source archives: hash them here.
+          curl -fsSL -o obs.tar.gz "https://github.com/obsproject/obs-studio/archive/refs/tags/${OBS_VERSION}.tar.gz"
+          curl -fsSL -o obs.zip "https://github.com/obsproject/obs-studio/archive/refs/tags/${OBS_VERSION}.zip"
+          src_macos="$(sha256sum obs.tar.gz | cut -d' ' -f1)"
+          src_windows="$(sha256sum obs.zip | cut -d' ' -f1)"
+
+          jq --arg version "${OBS_VERSION}" \
+             --arg srcMacos "${src_macos}" \
+             --arg srcWindows "${src_windows}" \
+             --slurpfile deps obs-deps.json '
+            ($deps[0]) as $d |
+            .dependencies["obs-studio"].version = $version |
+            .dependencies["obs-studio"].hashes = {"macos": $srcMacos, "windows-x64": $srcWindows} |
+            .dependencies.prebuilt.version = $d.prebuilt.version |
+            .dependencies.prebuilt.hashes = {
+              "macos": $d.prebuilt.hashes["macos-universal"],
+              "windows-x64": $d.prebuilt.hashes["windows-x64"]
+            } |
+            .dependencies.qt6.version = $d.qt6.version |
+            .dependencies.qt6.hashes = {
+              "macos": $d.qt6.hashes["macos-universal"],
+              "windows-x64": $d.qt6.hashes["windows-x64"]
+            } |
+            .dependencies.qt6.debugSymbols = {"windows-x64": $d.qt6.debugSymbols["windows-x64"]}
+          ' buildspec.json > buildspec-compat.json
+
+          cat buildspec-compat.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: buildspec-compat
+          path: buildspec-compat.json
+
+  macos:
+    name: macOS 🍏 (OBS ${{ inputs.obsVersion || '33.0.0' }})
+    runs-on: macos-26
+    needs: buildspec
+    defaults:
+      run:
+        shell: zsh --no-rcs --errexit --pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: buildspec-compat
+
+      - name: Set Up Environment 🔧
+        run: |
+          mv buildspec-compat.json buildspec.json
+          # OBS 33 requires Xcode / macOS SDK 26.5.
+          sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Build Plugin 🧱
+        uses: ./.github/actions/build-plugin
+        with:
+          target: macos-universal
+          config: RelWithDebInfo
+
+  windows:
+    name: Windows 🪟 (OBS ${{ inputs.obsVersion || '33.0.0' }})
+    runs-on: windows-2025
+    needs: buildspec
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: buildspec-compat
+
+      - name: Set Up Environment 🔧
+        run: Move-Item -Force buildspec-compat.json buildspec.json
+
+      - name: Build Plugin 🧱
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x64
+          config: RelWithDebInfo
+
+  ubuntu:
+    name: Ubuntu 🐧 (latest OBS from the official PPA)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Plugin 🧱
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x86_64
+          config: RelWithDebInfo
+
+      - name: Report libobs version 🔎
+        run: |
+          version="$(dpkg-query -W -f='${Version}' obs-studio)"
+          echo "Built against obs-studio ${version} from ppa:obsproject/obs-studio"
+          echo "### Ubuntu: built against obs-studio ${version}" >> "$GITHUB_STEP_SUMMARY"
+          major="${version%%.*}"
+          major="${major##*:}"
+          if (( major < 33 )); then
+            echo "::warning::The PPA provides OBS ${version}, older than 33"
+          fi
