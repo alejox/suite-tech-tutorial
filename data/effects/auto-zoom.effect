@@ -43,19 +43,18 @@ float4 PSZoom(VertData v_in) : TARGET
 	float4 color = image.Sample(textureSampler, v_in.uv);
 	float2 px = v_in.uv * source_size;
 
+	// Branchless on purpose: identical on D3D11, OpenGL and the stricter
+	// Metal transpiler (OBS 33+). A zero alpha leaves the pixel untouched.
+
 	// Soft spotlight around the cursor.
-	if (halo_color.a > 0.0) {
-		float d = distance(px, halo_pos * source_size);
-		float a = halo_color.a * (1.0 - smoothstep(halo_radius * 0.6, halo_radius, d));
-		color.rgb = lerp(color.rgb, halo_color.rgb, a);
-	}
+	float halo_dist = distance(px, halo_pos * source_size);
+	float halo_a = halo_color.a * (1.0 - smoothstep(halo_radius * 0.6, halo_radius, halo_dist));
+	color.rgb = lerp(color.rgb, halo_color.rgb, halo_a);
 
 	// Expanding ring on click.
-	if (ripple_color.a > 0.0) {
-		float d = distance(px, ripple_pos * source_size);
-		float ring = 1.0 - smoothstep(0.0, ripple_width, abs(d - ripple_radius));
-		color.rgb = lerp(color.rgb, ripple_color.rgb, ring * ripple_color.a);
-	}
+	float ripple_dist = distance(px, ripple_pos * source_size);
+	float ring = 1.0 - smoothstep(0.0, ripple_width, abs(ripple_dist - ripple_radius));
+	color.rgb = lerp(color.rgb, ripple_color.rgb, ring * ripple_color.a);
 
 	return color;
 }
