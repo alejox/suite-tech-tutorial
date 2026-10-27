@@ -1,0 +1,19 @@
+name: Branch Build
+run-name: ${{ github.ref_name }} branch build 🧱
+# Builds and packages the plugin for Windows, macOS and Ubuntu on every push
+# to a feature branch, so installable artifacts are available before merging.
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+      - 'release/**'
+permissions:
+  contents: read
+jobs:
+  build-project:
+    name: Build Project 🧱
+    uses: ./.github/workflows/build-project.yaml
+    secrets: inherit
+    permissions:
+      contents: read
