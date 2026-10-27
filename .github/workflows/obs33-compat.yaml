@@ -114,10 +114,13 @@ jobs:
       - name: Set Up Environment 🔧
         run: |
           Move-Item -Force buildspec-compat.json buildspec.json
-          # The template presets target Visual Studio 2022, which this image does not have.
-          (Get-Content CMakePresets.json -Raw) -replace 'Visual Studio 17 2022', 'Visual Studio 18 2026' |
+          # The template presets target Visual Studio 2022 and Windows SDK 10.0.22621,
+          # which this image does not have. Use what OBS 33 itself builds with.
+          (Get-Content CMakePresets.json -Raw) `
+            -replace 'Visual Studio 17 2022', 'Visual Studio 18 2026' `
+            -replace 'version=10\.0\.22621', 'version=10.0.26100.0' |
             Set-Content CMakePresets.json -NoNewline
-          Select-String -Path CMakePresets.json -Pattern '"generator"'
+          Select-String -Path CMakePresets.json -Pattern '"generator"', '"architecture"'
           cmake --version
 
       - name: Build Plugin 🧱
